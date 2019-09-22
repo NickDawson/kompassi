@@ -1,3 +1,4 @@
+from collections import namedtuple
 from datetime import date
 
 from django.conf import settings
@@ -61,8 +62,13 @@ STATE_CSS = dict(
     declined='label-danger',
 )
 
-PAYMENT_TYPE_CHOICES = [
+PAYMENT_METHOD_CHOICES = [
     ('bank_transfer', 'Tilisiirto'),
+]
+
+PAYMENT_TYPE_CHOICES = [
+    ('entrance_fee', 'Liittymismaksu'),
+    ('membership_fee', 'Jäsenmaksu'),
 ]
 
 
@@ -78,6 +84,10 @@ class Membership(models.Model, CsvExportMixin):
         blank=True,
         verbose_name='Viesti hakemuksen käsittelijälle',
     )
+
+    @property
+    def meta(self):
+        return self.organization.membership_organization_meta
 
     @property
     def is_pending_approval(self):
@@ -189,6 +199,22 @@ class Membership(models.Model, CsvExportMixin):
         from access.models import GroupEmailAliasGrant
         GroupEmailAliasGrant.ensure_aliases(self.person)
 
+    def get_current_term_payment(self):
+        """
+        Returns the current term membership fee payment or a MembershipFeeNonPayment object representing
+        that the membership fee is not paid.
+        """
+        term = self.meta.get_current_term()
+        if not term:
+            # Current term not configured
+            return None
+
+        payment = MembershipFeePayment.objects.filter(term=term, member=self).first()
+        if payment:
+            return payment
+
+        return MembershipFeeNonPayment(term, term.membership_fee_cents)
+
     class Meta:
         verbose_name = 'Jäsenyys'
         verbose_name_plural = 'Jäsenyydet'
@@ -221,9 +247,9 @@ class Term(models.Model):
             'Arvon puuttuminen tarkoittaa, että liittymismaksu ei ole tiedossa.',
     )
 
-    payment_type = models.CharField(
-        max_length=max(len(key) for (key, val) in PAYMENT_TYPE_CHOICES),
-        choices=PAYMENT_TYPE_CHOICES,
+    payment_method = models.CharField(
+        max_length=max(len(key) for (key, val) in PAYMENT_METHOD_CHOICES),
+        choices=PAYMENT_METHOD_CHOICES,
         verbose_name='Maksutapa',
         default='bank_transfer',
     )
@@ -248,6 +274,7 @@ class Term(models.Model):
                 money=format_price(self.membership_fee_cents),
                 end_date=format_date(self.end_date),
             )
+
     def save(self, *args, **kwargs):
         if self.start_date and not self.title:
             self.title = str(self.start_date.year)
@@ -255,10 +282,10 @@ class Term(models.Model):
         return super(Term, self).save(*args, **kwargs)
 
     @property
-    def display_payment_type(self):
-      if self.payment_type is None:
+    def display_payment_method(self):
+      if self.payment_method is None:
         return 'Maksutapa ei ole tiedossa.'
-      elif self.payment_type == 'bank_transfer':
+      elif self.payment_method == 'bank_transfer':
         return 'Tilisiirrolla. Yhdistyksen hallitus ohjeistaa jäsenmaksun maksamisen sähköpostitse liittymisen jälkeen.'
       else:
         return 'Maksutapa ei ole tiedossa.'
@@ -272,10 +299,28 @@ class Term(models.Model):
 
 
 class MembershipFeePayment(models.Model):
-    term = models.ForeignKey(Term, on_delete=models.CASCADE, related_name='membership_fee_payments')
+    term = models.ForeignKey(Term, on_delete=models.CASCADE, related_name='membership_fee_payments', verbose_name='Toimikausi')
     member = models.ForeignKey(Membership, on_delete=models.CASCADE, related_name='membership_fee_payments')
 
-    payment_date = models.DateField(auto_now_add=True)
+    payment_date = models.DateField(auto_now_add=True, verbose_name='Merkitty maksetuksi')
+    payment_type = models.CharField(
+        max_length=max(len(key) for (key, val) in PAYMENT_TYPE_CHOICES),
+        choices=PAYMENT_TYPE_CHOICES,
+        verbose_name='Maksun tyyppi',
+        default='membership_fee',
+    )
+    payment_method = models.CharField(
+        max_length=max(len(key) for (key, val) in PAYMENT_METHOD_CHOICES),
+        choices=PAYMENT_METHOD_CHOICES,
+        verbose_name='Maksutapa',
+        default='bank_transfer',
+    )
+    amount_cents = models.PositiveIntegerField(
+        verbose_name='Maksettu summa (snt)',
+        help_text='TODO vaihda kälissä euroiks',
+    )
+
+    is_paid = True
 
     def __str__(self):
         return self.term.title if self.term else 'None'
@@ -293,3 +338,19 @@ class MembershipFeePayment(models.Model):
         return self.member.person.official_name if self.member else None
     admin_get_official_name.short_description = 'Jäsen'
     admin_get_official_name.admin_order_field = 'member'
+
+    @property
+    def formatted_amount(self):
+        return format_price(self.amount_cents)
+
+
+class MembershipFeeNonPayment(namedtuple('MembershipFeeNonPayment', 'term amount_cents')):
+    payment_date = None
+    is_paid = False
+
+    def get_payment_type_display(self):
+        return 'Jäsenmaksu'
+
+    @property
+    def formatted_amount(self):
+        return format_price(self.amount_cents)

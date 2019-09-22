@@ -10,11 +10,12 @@ from core.models import Organization
 from core.sort_and_filter import Filter
 from core.tabs import Tab
 from core.utils import url, initialize_form
+from tickets.utils import format_price
 from event_log.utils import emit
 
-from ..forms import MemberForm, MembershipForm
+from ..forms import MemberForm, MembershipForm, MembershipFeePaymentForm
 from ..helpers import membership_admin_required
-from ..models import STATE_CHOICES, Membership
+from ..models import STATE_CHOICES, Membership, MembershipFeePayment, MembershipFeeNonPayment
 
 
 EXPORT_FORMATS = [
@@ -86,6 +87,7 @@ def membership_admin_members_view(request, vars, organization, format='screen'):
         export_formats=EXPORT_FORMATS,
         now=now(),
         title=title,
+        current_term=organization.membership_organization_meta.get_current_term(),
     )
 
     if format in HTML_TEMPLATES:
@@ -118,6 +120,15 @@ def membership_admin_member_view(request, vars, organization, person_id):
 
     forms = [membership_form] if read_only else [membership_form, member_form]
 
+    membership_fee_payments = MembershipFeePayment.objects.filter(
+        term__organization=organization, member=membership
+    ).order_by('term__end_date')
+    current_term = membership.meta.get_current_term()
+    if current_term.membership_fee_cents and not MembershipFeePayment.objects.filter(term=current_term, member=membership).exists():
+        current_term_nonpayment = MembershipFeeNonPayment(term=current_term, amount_cents=current_term.membership_fee_cents)
+        membership_fee_payments = list(membership_fee_payments) + [current_term_nonpayment, ]
+    membership_fee_payment_form = initialize_form(MembershipFeePaymentForm, request, current_term=current_term)
+
     if request.method == 'POST':
         action = request.POST['action']
 
@@ -135,6 +146,13 @@ def membership_admin_member_view(request, vars, organization, person_id):
 
             else:
                 messages.error(request, 'Tarkista lomakkeen tiedot.')
+        elif action == 'mark-paid':
+            payment = membership_fee_payment_form.save(commit=False)
+            payment.member = membership
+            payment.save()
+
+            messages.success(request, 'Jäsenmaksu merkattiin maksetuksi.')
+            return redirect('membership_admin_member_view', organization.slug, membership.person.id)
         else:
             raise NotImplementedError(action)
 
@@ -144,14 +162,16 @@ def membership_admin_member_view(request, vars, organization, person_id):
         Tab('membership-admin-person-tab', 'Jäsenen tiedot', active=True),
         Tab('membership-admin-state-tab', 'Jäsenyyden tila'),
         # Tab('membership-admin-events-tab', 'Jäsenyyteen liittyvät tapahtumat'),
-        # Tab('membership-admin-payments-tab', 'Jäsenmaksut'),
+        Tab('membership-admin-payments-tab', 'Jäsenmaksut'),
     ]
 
     vars.update(
-        member=membership.person,
         member_form=member_form,
-        membership=membership,
+        member=membership.person,
+        membership_fee_payment_form=membership_fee_payment_form,
+        membership_fee_payments=membership_fee_payments,
         membership_form=membership_form,
+        membership=membership,
         next_membership=next_membership,
         previous_membership=previous_membership,
         read_only=read_only,
