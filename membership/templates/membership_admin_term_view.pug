@@ -1,0 +1,19 @@
+extends core_admin_base.pug
+- load bootstrap3
+block title
+  |{{ organization.name }}: {{ member.official_name }}
+block admin_content
+  form.form-horizontal(method="POST")
+  .panel.panel-default
+    .panel-heading
+      if current_term.pk
+        h4 Toimikauden {{ current_term }} tiedot
+      else
+        h4 Uuden toimikauden tiedot
+    .panel-body
+      {% bootstrap_form form layout='horizontal' %}
+    .panel-footer.clearfix
+      .btn-group.pull-right
+        button.btn.btn-success(type="submit")
+          i.fa.fa-save
+          | Tallenna

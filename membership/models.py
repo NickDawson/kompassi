@@ -42,10 +42,10 @@ class MembershipOrganizationMeta(models.Model, GroupManagementMixin):
         if d is None:
             d = date.today()
 
-        return self.organization.terms.get(
+        return self.organization.terms.filter(
             start_date__lte=d,
             end_date__gte=d,
-        )
+        ).first()
 
 
 STATE_CHOICES = [
