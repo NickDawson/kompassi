@@ -39,13 +39,13 @@ urlpatterns = [
     url(
         r'^organizations/(?P<organization_slug>[a-z0-9-]+)/admin/term/(?P<term_id>\d+)/?$',
         membership_admin_term_view,
-        name='membership_admin_term_view'
+        name='membership_admin_term_view',
     ),
 
     url(
         r'^organizations/(?P<organization_slug>[a-z0-9-]+)/admin/term/?$',
         membership_admin_term_view,
-        name='membership_admin_current_term_view'
+        name='membership_admin_new_term_view',
     ),
 
     url(

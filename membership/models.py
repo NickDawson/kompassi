@@ -7,7 +7,7 @@ from django.db import models
 
 from core.csv_export import CsvExportMixin
 from core.models import GroupManagementMixin, Organization, Person
-from core.utils import ensure_user_group_membership, format_date
+from core.utils import ensure_user_group_membership, format_date, url
 from tickets.utils import format_price
 
 
@@ -235,7 +235,7 @@ class Term(models.Model):
         blank=True,
         verbose_name='Liittymismaksu (snt)',
         help_text='Arvo 0 (nolla senttiä) tarkoittaa, että yhdistyksellä ei ole tällä kaudella liittymismaksua. '
-            'Arvon puuttuminen tarkoittaa, että liittymismaksu ei ole tiedossa.',
+            'Arvon puuttuminen tarkoittaa, että liittymismaksu ei ole tiedossa. (TODO: Se, että jäsenmaksut esitetään tässä sentteinä eikä euroina, on tiedostettu puute joka korjataan… joskus. Siihen asti kerro euromääräinen jäsenmaksu 100:lla.)',
     )
 
     membership_fee_cents = models.PositiveIntegerField(
@@ -289,6 +289,9 @@ class Term(models.Model):
         return 'Tilisiirrolla. Yhdistyksen hallitus ohjeistaa jäsenmaksun maksamisen sähköpostitse liittymisen jälkeen.'
       else:
         return 'Maksutapa ei ole tiedossa.'
+
+    def get_absolute_url(self):
+        return url('membership_admin_term_view', self.organization.slug, self.pk)
 
     def __str__(self):
         return self.title

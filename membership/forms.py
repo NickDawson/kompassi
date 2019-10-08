@@ -1,3 +1,5 @@
+from datetime import date
+
 from django import forms
 
 from crispy_forms.layout import Layout, Fieldset
@@ -6,7 +8,7 @@ from core.forms import PersonForm
 from core.models import Person
 from core.utils import indented_without_label, horizontal_form_helper
 
-from .models import Membership, MembershipFeePayment
+from .models import Membership, MembershipFeePayment, Term
 
 
 class MemberForm(PersonForm):
@@ -84,3 +86,9 @@ class MembershipFeePaymentForm(forms.ModelForm):
     class Meta:
         model = MembershipFeePayment
         fields = ('term', 'payment_type', 'payment_method', 'amount_cents')
+
+
+class TermForm(forms.ModelForm):
+    class Meta:
+        model = Term
+        fields = ('title', 'start_date', 'end_date', 'entrance_fee_cents', 'membership_fee_cents')
